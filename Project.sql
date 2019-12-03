@@ -1,5 +1,3 @@
-CREATE DATABASE  IF NOT EXISTS `CS5200` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
-USE `CS5200`;
 -- MySQL dump 10.13  Distrib 8.0.18, for macos10.14 (x86_64)
 --
 -- Host: localhost    Database: CS5200
@@ -67,7 +65,7 @@ CREATE TABLE `OrderRecord` (
   `Quantity` int(11) NOT NULL,
   `Price` decimal(10,2) NOT NULL,
   `ShipDate` date DEFAULT NULL,
-  `Status` varchar(32) DEFAULT NULL,
+  `Status` varchar(32) NOT NULL,
   `BackOrder` tinyint(1) NOT NULL,
   KEY `orderrecord_ibfk_2` (`OrderID`),
   KEY `orderrecord_ibfk_3` (`SKU`),
@@ -207,7 +205,12 @@ DELIMITER ;;
 CREATE DEFINER=`root`@`localhost` PROCEDURE `CustomerInfo`(IN CustomerIDInput INT)
     READS SQL DATA
 BEGIN 
+	IF NOT EXISTS (SELECT * FROM Customer WHERE CustomerID = CustomerIDInput) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Customer does not exist';
+ELSE
 	SELECT * FROM Customer WHERE CustomerID = CustomerIDInput;
+END IF;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -226,39 +229,46 @@ DELIMITER ;
 DELIMITER ;;
 CREATE DEFINER=`root`@`localhost` PROCEDURE `CustomerOrder`(IN `CustomerIDInput` INT)
     READS SQL DATA
-SELECT Name, Quantity, Price, Total, OrderDate, ShipDate, Status FROM
-(
-SELECT 1 AS ord, CustomerID, a.OrderID, c.Name, Quantity, a.Price, Quantity * a.Price AS Total, OrderDate, ShipDate, Status 
-FROM OrderRecord a 
-INNER JOIN Orders b ON a.OrderID = b.OrderID 
-INNER JOIN Products c ON a.SKU = c.SKU 
-WHERE CustomerID = CustomerIDInput
-UNION
-SELECT 2 AS ord, CustomerID, OrderID, "Reimburse", "", "", SUM(Amount) * -1 AS Total, "", "", ""
-FROM Reimbursement c
-WHERE CustomerID = CustomerIDInput
-GROUP BY OrderID
-UNION
-SELECT 4 AS ord, CustomerID, a.OrderID, "Total Charge", "", "", SUM(Total) AS Total, "", "", ""
-FROM (
-    SELECT CustomerID, a.OrderID, SUM(Quantity * a.Price) AS Total
-    FROM OrderRecord a
-    INNER JOIN Orders b ON a.OrderID = b.OrderID
-    INNER JOIN Products c ON a.SKU = c.SKU
-    WHERE CustomerID = CustomerIDInput
-    GROUP BY a.OrderID 
-    UNION
-    SELECT a.CustomerID, a.OrderID, SUM(IFNULL(Amount, 0)) * -1 AS Total
-    FROM Orders a 
-    LEFT JOIN Reimbursement c ON a.OrderID = c.OrderID
-    WHERE a.CustomerID = CustomerIDInput
-    GROUP BY a.OrderID
-) a
-WHERE CustomerID = CustomerIDInput
-GROUP BY OrderID
-ORDER BY OrderID
-) b 
-ORDER BY OrderID, ord ;;
+BEGIN
+IF NOT EXISTS (SELECT * FROM Customer WHERE CustomerID = CustomerIDInput) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Customer does not exist';
+ELSE
+	SELECT Name, Quantity, Price, Total, OrderDate, ShipDate, Status FROM
+	(
+	SELECT 1 AS ord, CustomerID, a.OrderID, c.Name, Quantity, a.Price, Quantity * a.Price AS Total, OrderDate, ShipDate, Status 
+	FROM OrderRecord a 
+	INNER JOIN Orders b ON a.OrderID = b.OrderID 
+	INNER JOIN Products c ON a.SKU = c.SKU 
+	WHERE CustomerID = CustomerIDInput
+	UNION
+	SELECT 2 AS ord, CustomerID, OrderID, "Reimburse", "", "", SUM(Amount) * -1 AS Total, "", "", ""
+	FROM Reimbursement c
+	WHERE CustomerID = CustomerIDInput
+	GROUP BY OrderID
+	UNION
+	SELECT 4 AS ord, CustomerID, a.OrderID, "Total Charge", "", "", SUM(Total) AS Total, "", "", ""
+	FROM (
+		SELECT CustomerID, a.OrderID, SUM(Quantity * a.Price) AS Total
+		FROM OrderRecord a
+		INNER JOIN Orders b ON a.OrderID = b.OrderID
+		INNER JOIN Products c ON a.SKU = c.SKU
+		WHERE CustomerID = CustomerIDInput
+		GROUP BY a.OrderID 
+		UNION
+		SELECT a.CustomerID, a.OrderID, SUM(IFNULL(Amount, 0)) * -1 AS Total
+		FROM Orders a 
+		LEFT JOIN Reimbursement c ON a.OrderID = c.OrderID
+		WHERE a.CustomerID = CustomerIDInput
+		GROUP BY a.OrderID
+	) a
+	WHERE CustomerID = CustomerIDInput
+	GROUP BY OrderID
+	ORDER BY OrderID
+	) b 
+	ORDER BY OrderID, ord;
+END IF;
+END;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -393,7 +403,7 @@ SET QuantityList1 = QuantityList;
 
 BEGIN
 	ROLLBACK;
-END;
+END ;
 
 START TRANSACTION;
 validate_list:
@@ -505,7 +515,7 @@ ELSE
 				INSERT INTO OrderRecord(OrderID, SKU, Quantity, Price, ShipDate, Status, BackOrder) VALUES (OrderID1, SKUInput, QuantityInput, Price1, NULL, "In Process", 1);
             ELSE
 				INSERT INTO OrderRecord(OrderID, SKU, Quantity, Price, ShipDate, Status, BackOrder) VALUES (OrderID1, SKUInput, QuantityInput, Price1, NULL, "In Process", 1);
-				UPDATE Inventory SET Quantity = 0 WHERE SKU = SKUInput;
+				UPDATE Inventory SET Quantity = InventoryQuantity1 WHERE SKU = SKUInput;
 			END IF;
             END IF;
 		END IF;
@@ -555,7 +565,7 @@ ELSE
         UPDATE Products SET Price = PriceInput WHERE SKU = SKUInput;
 	END IF;
 END IF;
-SELECT * FROM PriceHistory;
+CALL ProductPriceHistory(SKUInput);
 CALL ProductInfo(SKUInput);
 END ;;
 DELIMITER ;
@@ -613,6 +623,26 @@ DELIMITER ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
 /*!50003 SET character_set_results = @saved_cs_results */ ;
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `ProductPriceHistory` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ProductPriceHistory`(IN `SKUInput` VARCHAR(12))
+    READS SQL DATA
+BEGIN 
+	SELECT SKU, Price, fromDate, toDate FROM PriceHistory WHERE SKU = SKUInput;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 /*!50003 DROP PROCEDURE IF EXISTS `ProductInfo` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -635,16 +665,14 @@ ELSE
 	SELECT * FROM Products WHERE SKU = SKUInput
 	UNION
 	SELECT 'Recommended Products', GROUP_CONCAT(Name SEPARATOR ', ') AS Recommendation, '', '' FROM Products WHERE SKU IN (SELECT * FROM (
-	SELECT SKU FROM OrderRecord WHERE (
-		SELECT COUNT(SKU)
-		FROM OrderRecord 
-		WHERE OrderID IN (SELECT OrderID 
-					  FROM OrderRecord WHERE SKU = SKUInput GROUP BY OrderID) 
-					  AND SKU NOT IN (SKUInput)
-		) >= 1 AND SKU NOT IN (SKUInput)
-		GROUP BY SKU
-		ORDER BY COUNT(SKU) DESC 
-		LIMIT 3) as t);
+	SELECT SKU
+	FROM OrderRecord
+	WHERE SKU NOT IN (SKUInput) AND OrderID IN (SELECT OrderID 
+						  FROM OrderRecord WHERE SKU = SKUInput GROUP BY OrderID) 
+	GROUP BY SKU
+	HAVING COUNT(SKU) >= 2
+	ORDER BY COUNT(SKU) DESC
+	LIMIT 3) as t);
 END IF;
 
 END ;;
@@ -668,7 +696,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerAddress`(IN `addres
     DETERMINISTIC
 BEGIN
 
-IF NOT address REGEXP '[:alnum:]' THEN
+IF NOT address REGEXP '^[A-Za-z0-9 /]+$' THEN
 
 	SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Invalid address';
@@ -696,7 +724,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerCity`(IN `City` VAR
     DETERMINISTIC
 BEGIN
 
-IF NOT City REGEXP '[a-zA-Z]' THEN
+IF NOT City REGEXP '^[a-zA-Z ]+$' THEN
 
 	SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Invalid city name';
@@ -724,7 +752,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerCountry`(IN `Countr
     DETERMINISTIC
 BEGIN
 
-IF NOT Country REGEXP '[a-zA-Z]' THEN
+IF NOT Country REGEXP '^[a-zA-Z ]+$' THEN
 
 	SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Invalid country';
@@ -752,7 +780,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerName`(IN `Name` VAR
     DETERMINISTIC
 BEGIN
 
-IF NOT Name REGEXP '[a-zA-Z]' THEN
+IF NOT Name REGEXP '^[a-zA-Z ]+$' THEN
 
 	SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Invalid Name';
@@ -775,12 +803,12 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerPostal`(IN `Postal` INT)
+CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerPostal`(IN `Postal` VARCHAR(16))
     READS SQL DATA
     DETERMINISTIC
 BEGIN
 
-IF NOT Postal REGEXP '^[0-9]+$' AND Postal < 0 THEN
+IF NOT Postal REGEXP '^[a-zA-Z0-9 -]+$' THEN
 
 	SIGNAL SQLSTATE '45000'
     SET MESSAGE_TEXT = 'Invalid Postal';
