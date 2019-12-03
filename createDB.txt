@@ -1,4 +1,4 @@
-DROP DATABASE IF EXISTS TuanPedramProject;
+DROP DATABASE IF EXISTS TuanProject;
 CREATE DATABASE TuanProject;
 use TuanProject;
 source Project.sql;
