@@ -1,6 +1,6 @@
 -- MySQL dump 10.13  Distrib 8.0.18, for macos10.14 (x86_64)
 --
--- Host: localhost    Database: CS5200
+-- Host: localhost    Database: TuanProject
 -- ------------------------------------------------------
 -- Server version	8.0.17
 
