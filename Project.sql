@@ -1,9 +1,3 @@
--- MySQL dump 10.13  Distrib 8.0.18, for macos10.14 (x86_64)
---
--- Host: localhost    Database: TuanProject
--- ------------------------------------------------------
--- Server version	8.0.17
-
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
@@ -82,6 +76,12 @@ CREATE TABLE `OrderRecord` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- the trigger check if there is any back order, then fulfilled that back
+-- order before insert
+--
+
 /*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `InventoryUpdate` BEFORE INSERT ON `orderrecord` FOR EACH ROW BEGIN
 SET @PrevBackOrder:= (SELECT MIN(OrderID) FROM OrderRecord WHERE BackOrder = 1 AND SKU = NEW.SKU);
 IF (@PrevBackOrder IS NULL) THEN
@@ -102,6 +102,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- the trigger creates reimbursement amount if new updated price lower than bought price
+--
+
 /*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `PriceUpdate` BEFORE UPDATE ON `orderrecord` FOR EACH ROW BEGIN 
 SET @NewPrice:= (SELECT Price FROM PriceHistory WHERE fromDate IN (SELECT MAX(fromDate) FROM PriceHistory WHERE SKU = NEW.SKU) AND SKU = NEW.SKU);
 SET @CustomerID:= (SELECT CustomerID FROM Orders WHERE OrderID = NEW.OrderID);
@@ -189,9 +194,6 @@ CREATE TABLE `Reimbursement` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping routines for database 'CS5200'
---
 /*!50003 DROP PROCEDURE IF EXISTS `CustomerInfo` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -202,6 +204,11 @@ CREATE TABLE `Reimbursement` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Display Customer's Information store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `CustomerInfo`(IN CustomerIDInput INT)
     READS SQL DATA
 BEGIN 
@@ -227,6 +234,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Display Customer's Orders store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `CustomerOrder`(IN `CustomerIDInput` INT)
     READS SQL DATA
 BEGIN
@@ -284,6 +296,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Insert new Customer's information store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InsertCustomer`(IN `NameInput` VARCHAR(32), IN `AddressInput` VARCHAR(64), IN `CityInput` VARCHAR(32), IN `StateInput` VARCHAR(2), IN `CountryInput` VARCHAR(32), IN `PostalInput` VARCHAR(16))
     MODIFIES SQL DATA
 BEGIN
@@ -295,7 +312,6 @@ CALL validateCustomerCountry(CountryInput);
 CALL validateCustomerPostal(PostalInput);
 
 INSERT INTO Customer(Name, Address, City, State, Country, Postal) VALUES (NameInput, AddressInput, CityInput, StateInput, CountryInput, PostalInput);
-SELECT * FROM Customer Order By CustomerID DESC LIMIT 1;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -312,6 +328,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Insert new inventories store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InsertInventory`(IN `SKUInput` VARCHAR(12), IN `QuantityInput` INT, IN `DateInput` DATE)
     MODIFIES SQL DATA
 BEGIN
@@ -365,8 +386,6 @@ ELSE
     END IF;
 END IF;
 COMMIT;
-
-SELECT SKU, Quantity, updatedDate FROM Inventory ORDER BY SKU;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -383,6 +402,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Insert new Order into Orders table store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InsertOrder`(IN `CustomerIDInput` INT, IN `OrderDateInput` DATE, IN `PartiallyInput` BOOLEAN, IN `SKUList` TEXT, IN `QuantityList` TEXT)
     MODIFIES SQL DATA
 BEGIN
@@ -450,8 +474,6 @@ insert_list:
     END LOOP;
 END;
 COMMIT;
-CALL CustomerOrder(CustomerIDInput);
-CALL InventoryDisplay();
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -468,6 +490,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Insert new order records into OrderRecord table store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InsertOrderRecord`(IN `OrderID1` INT, IN `SKUInput` VARCHAR(12), IN `QuantityInput` INT, IN `OrderDate` DATE, IN `Part` BOOLEAN)
     MODIFIES SQL DATA
 BEGIN
@@ -538,6 +565,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Insert new price into PriceHistory table store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InsertPrice`(IN `SKUInput` VARCHAR(12), IN `PriceInput` DECIMAL(10,2), IN `fromDateInput` DATE)
     MODIFIES SQL DATA
 BEGIN
@@ -565,8 +597,6 @@ ELSE
         UPDATE Products SET Price = PriceInput WHERE SKU = SKUInput;
 	END IF;
 END IF;
-CALL ProductPriceHistory(SKUInput);
-CALL ProductInfo(SKUInput);
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -583,6 +613,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Insert new products store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InsertProduct`(IN `SKUInput` VARCHAR(12), IN `NameInput` VARCHAR(64), IN `DescriptionInput` TEXT, IN `PriceInput` DECIMAL(10,2), IN `DateInput` DATE)
     MODIFIES SQL DATA
 BEGIN
@@ -596,7 +631,6 @@ ELSE
     INSERT INTO Products(SKU, Name, Description, Price) VALUES (SKUInput, NameInput, DescriptionInput, PriceInput);
     INSERT INTO PriceHistory(SKU, Price, fromDate) VALUES (SKUInput, PriceInput, DateInput);
 END IF;
-SELECT * FROM Products;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -613,6 +647,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Display inventory's Information store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `InventoryDisplay`()
     READS SQL DATA
 BEGIN 
@@ -633,6 +672,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Display Price History of a specific product store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `ProductPriceHistory`(IN `SKUInput` VARCHAR(12))
     READS SQL DATA
 BEGIN 
@@ -653,6 +697,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- Display a specific Product's Information store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `ProductInfo`(IN `SKUInput` VARCHAR(12))
     READS SQL DATA
 BEGIN
@@ -691,6 +740,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Customer's Address store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerAddress`(IN `address` VARCHAR(64))
     READS SQL DATA
     DETERMINISTIC
@@ -719,6 +773,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Customer's City store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerCity`(IN `City` VARCHAR(32))
     READS SQL DATA
     DETERMINISTIC
@@ -747,6 +806,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Customer's Country store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerCountry`(IN `Country` VARCHAR(32))
     READS SQL DATA
     DETERMINISTIC
@@ -775,6 +839,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Customer's Name store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerName`(IN `Name` VARCHAR(32))
     READS SQL DATA
     DETERMINISTIC
@@ -803,6 +872,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Customer's Postal Code store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerPostal`(IN `Postal` VARCHAR(16))
     READS SQL DATA
     DETERMINISTIC
@@ -831,6 +905,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Customer's State store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateCustomerState`(IN `State` VARCHAR(2))
     READS SQL DATA
     DETERMINISTIC
@@ -859,6 +938,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Price store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validatePrice`(IN `Price` DECIMAL(10,2))
     READS SQL DATA
     DETERMINISTIC
@@ -887,6 +971,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate Quantity store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateQuantity`(IN `Quantity` INT)
     READS SQL DATA
     DETERMINISTIC
@@ -915,6 +1004,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
+
+--
+-- validate SKU store procedure
+--
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `validateSKU`(IN `SKU` VARCHAR(12))
     READS SQL DATA
     DETERMINISTIC
@@ -942,5 +1036,3 @@ DELIMITER ;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
-
--- Dump completed on 2019-11-25 22:13:22
